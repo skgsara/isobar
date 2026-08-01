@@ -19,15 +19,18 @@ and writes KG-FAX `.syn` files and the `kgfax.ini` settings file.
 
 ## Download
 
-Prebuilt binaries for macOS, Windows, and Linux are attached to each
-[**Release**](https://github.com/skgsara/isobar/releases):
+Prebuilt, **self-contained** binaries for macOS, Windows, and Linux are
+attached to each [**Release**](https://github.com/sakuragawasara/isobar/releases)
+— no FLTK/RtAudio install needed on the target machine:
 
-- **macOS** — `Isobar-<version>-macOS.dmg` (an `Isobar.app` bundle; ad-hoc
-  signed, so right-click → Open the first time to clear Gatekeeper).
-- **Windows** — `Isobar-<version>-windows.zip` (a portable folder with the
-  `.exe` and its runtime icon).
-- **Linux** — `Isobar-<version>-linux.tar.bz2` (a portable folder; needs
-  FLTK + RtAudio system libraries installed — see Build below).
+- **macOS** — `Isobar-<version>-macOS.dmg` (an `Isobar.app` bundle with the
+  FLTK/RtAudio dylibs embedded in `Contents/Libraries/`; ad-hoc signed, so
+  right-click → Open the first time to clear Gatekeeper).
+- **Windows** — `Isobar-<version>-windows.zip` (a portable folder; FLTK +
+  RtAudio are statically linked into the `.exe`, so there are no DLLs to
+  install).
+- **Linux** — `Isobar-<version>-linux.AppImage` (a single file — `chmod +x`
+  and run; the FLTK/RtAudio `.so`s are bundled inside).
 
 To build from source instead, see [Build](#build).
 
@@ -97,12 +100,12 @@ tools/  make-icons.sh (icon regeneration) + extract_dfm.py (dev/research).
 
 ## Status
 
-**v1.0.0 released** — working software. All core receive features are
+**v1.0.1 released** — working software. All core receive features are
 implemented and verified on real JMH recordings; see [`ROADMAP.md`](ROADMAP.md)
 for the milestone map (M0–M5 done; M6 = packaging & cross-platform CI).
 Continuous builds run on macOS, Linux, and Windows via GitHub Actions
-(`.github/workflows/`); tags `v*.*.*` produce native release packages
-(macOS `.dmg`, Windows `.zip`, Linux tarball) attached to a
+(`.github/workflows/`); tags `v*.*.*` produce self-contained native release
+packages (macOS `.dmg`, Windows `.zip`, Linux `.AppImage`) attached to a
 [GitHub Release](https://github.com/skgsara/isobar/releases).
 
 ## License

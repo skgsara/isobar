@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(isobar
-    VERSION 1.0.0
+    VERSION 1.0.1
     LANGUAGES CXX)
 
 # Expose the version to the source as ISOBAR_VERSION (used in the Details

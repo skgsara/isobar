@@ -142,7 +142,7 @@ RReSycn, SyncWidth (n where width = 10*n ms), Sync2Thre, DetTime.
 | GroupBox6 | TGroupBox | 208 | 8 | 105 | 145 | ソフト情報 | Info |
 | Image1 (GroupBox6) | TImage | 36 | 23 | 33 | 33 |  | (portrait icon) |
 | Label10 (GroupBox6) | TLabel | 4 | 69 | 98 | 13 | KG-FAX v1.1.3 | Isobar |
-| Label11 (GroupBox6) | TLabel | 18 | 104 | 70 | 12 | Copyright K.G | version (ISOBAR_VERSION, 1.0.0) |
+| Label11 (GroupBox6) | TLabel | 18 | 104 | 70 | 12 | Copyright K.G | version (ISOBAR_VERSION macro, = project version) |
 | Label13 (GroupBox6) | TLabel | 3 | 121 | 99 | 12 | 2009/7/8 | © Sara Sakuragawa |
 | Label2 (GroupBox6) | TLabel | 58 | 83 | 44 | 12 | Build000 | .syn compatible |
 | (added) | TLabel |  |  |  |  |  | GPL v3+ |
