@@ -40,10 +40,16 @@ jobs:
             libfltk1.3-dev libjpeg-dev libpng-dev zlib1g-dev \
             librtaudio-dev
 
-      # vcpkg is preinstalled on the windows-latest image; this manifest drives it.
+      # vcpkg is preinstalled on the windows-latest image. We use the
+      # x64-windows-static-md triplet so FLTK + RtAudio (and their png/jpeg/z
+      # deps) are STATIC-linked into the .exe — no FLTK/RtAudio DLLs need
+      # shipping. The MSVC runtime stays dynamic (/MD), which matches CMake's
+      # default CMAKE_MSVC_RUNTIME_LIBRARY policy and is present on every
+      # Windows machine. (Fully-static /MT via x64-windows-static causes
+      # LNK2038 CRT-linkage mismatches and isn't worth it.)
       - name: Export vcpkg dependencies (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg --triplet x64-windows install fltk rtaudio
+        run: vcpkg --triplet x64-windows-static-md install fltk rtaudio
 
       - name: Configure (macOS / Linux)
         if: runner.os != 'Windows'
@@ -55,7 +61,7 @@ jobs:
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
 
       - name: Build
         run: cmake --build build --config Release --parallel

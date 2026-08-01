@@ -29,7 +29,7 @@ jobs:
           - os: macos-latest
             artifact: Isobar-${{ github.ref_name }}-macOS.dmg
           - os: ubuntu-latest
-            artifact: Isobar-${{ github.ref_name }}-linux.tar.bz2
+            artifact: Isobar-${{ github.ref_name }}-linux.AppImage
           - os: windows-latest
             artifact: Isobar-${{ github.ref_name }}-windows.zip
 
@@ -38,7 +38,9 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install cmake fltk rtaudio pkg-config
+        # dylibbundler embeds the Homebrew FLTK/RtAudio dylibs into the .app
+        # so the .dmg runs on Macs without Homebrew installed (see Bundle step).
+        run: brew install cmake fltk rtaudio pkg-config dylibbundler
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -51,7 +53,9 @@ jobs:
 
       - name: Export vcpkg dependencies (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg --triplet x64-windows install fltk rtaudio
+        # x64-windows-static-md = static FLTK/RtAudio (no DLLs to ship),
+        # dynamic CRT (/MD, present on every Windows machine).
+        run: vcpkg --triplet x64-windows-static-md install fltk rtaudio
 
       - name: Configure (macOS / Linux)
         if: runner.os != 'Windows'
@@ -63,7 +67,7 @@ jobs:
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -72,20 +76,106 @@ jobs:
         working-directory: build
         run: ctest -C Release --output-on-failure
 
-      - name: Package (CPack)
+      # --- Self-containment: each OS makes a package that runs WITHOUT
+      #     FLTK/RtAudio pre-installed on the target machine. The mechanism
+      #     differs per OS (no single one works for all three). ---
+
+      # macOS: Homebrew only ships shared dylibs, so embed them into the .app.
+      # dylibbundler walks otool -L, copies every Homebrew dylib (and its
+      # transitive deps) into Contents/Libraries/, and rewrites install names
+      # to @executable_path/../Libraries. Re-codesign ad-hoc AFTER — the
+      # install-name rewrite invalidates the existing signature.
+      - name: Bundle dylibs (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          APP="build/Isobar.app"
+          dylibbundler -od -b \
+            -x "$APP/Contents/MacOS/Isobar" \
+            -d "$APP/Contents/Libraries" \
+            -p "@executable_path/../Libraries" \
+            -i "/usr/lib/system:/System/Library/Frameworks"
+          codesign --force --deep --sign - "$APP"
+          # Gate: fail loudly if any Homebrew path leaked into the bundle.
+          if otool -L "$APP/Contents/MacOS/Isobar" | grep -i homebrew; then
+            echo "ERROR: Homebrew dylib path leaked into the bundle"; exit 1
+          fi
+          echo "Bundle is self-contained."
+
+      # Linux: AppImage. linuxdeploy runs ldd on the binary, copies every
+      # non-system .so into the AppDir, writes an AppRun launcher, and packs
+      # a SquashFS .AppImage the user chmods +x and runs. (Static-linking is
+      # not viable on Linux: glibc can't be static-linked and Ubuntu's
+      # librtaudio-dev ships no static lib anyway.)
+      - name: Package AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # linuxdeploy + its appimage output plugin (continuous channel).
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage-x86_64.AppImage
+
+          # Lay out the AppDir (FHS-style: usr/bin, usr/share/...).
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          install -m755 build/isobar-gui    AppDir/usr/bin/isobar-gui
+          install -m755 build/isobar-decode AppDir/usr/bin/isobar-decode
+          install -m644 assets/isobar.desktop        AppDir/usr/share/applications/
+          install -m644 assets/isobar-512.png        AppDir/usr/share/icons/hicolor/256x256/apps/isobar.png
+
+          # linuxdeploy deploys all .so deps + writes AppRun + emits the AppImage.
+          export OUTPUT="${{ matrix.artifact }}"
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable AppDir/usr/bin/isobar-gui \
+            --desktop-file AppDir/usr/share/applications/isobar.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/isobar.png \
+            --output appimage
+          mv "${{ matrix.artifact }}" build/
+
+      - name: Package CPack (macOS / Windows)
+        if: runner.os != 'Linux'
         working-directory: build
         run: cpack -C Release
 
-      # CPack names the artifact Isobar-<version>-<platform>.<ext> (e.g.
-      # Isobar-1.0.0-Darwin.dmg, -win64.zip, -Linux.tar.bz2). Rename to the
-      # per-OS release name for a tidy GitHub Release assets list.
-      - name: Rename artifact
+      # macOS CPack (DragNDrop) names it Isobar-<ver>-Darwin.dmg; Windows CPack
+      # (ZIP) names it Isobar-<ver>-win64.zip. Rename to the per-OS release
+      # name. (Linux's AppImage was already named correctly by OUTPUT= above.)
+      - name: Rename CPack artifact (macOS / Windows)
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           mkdir -p out
           mv build/Isobar-*.* out/ 2>/dev/null || mv build/Isobar-* out/
           echo "Renamed to: $(ls out/)"
           mv out/Isobar-* out/${{ matrix.artifact }}
+
+      # Windows: sanity-check that the static link actually took — no FLTK/
+      # RtAudio DLLs should be sitting next to the exe in the package.
+      - name: Verify no dependency DLLs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== DLLs next to isobar-gui.exe in the ZIP install tree ==="
+          $installDir = "build\_CPack_Packages\win64\ZIP\Isobar-*\bin"
+          $dlls = Get-ChildItem -Path $installDir -Filter *.dll -ErrorAction SilentlyContinue
+          if ($dlls) {
+            Write-Host "Found DLLs (may indicate non-static linkage):"
+            $dlls | Format-Table Name
+            $bad = $dlls | Where-Object { $_.Name -match 'fltk|rtaudio' }
+            if ($bad) { Write-Host "ERROR: FLTK/RtAudio DLL present — not self-contained"; exit 1 }
+          } else {
+            Write-Host "No DLLs next to the exe — self-contained. Good."
+          }
+
+      # Linux's AppImage landed in build/; macOS/Windows already moved theirs
+      # to out/ in the Rename step. Get Linux's into out/ too so the upload
+      # step has one consistent path.
+      - name: Stage artifact (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p out
+          mv "build/${{ matrix.artifact }}" out/
+          ls -la out/
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,14 @@
+# .desktop file for the Linux AppImage (consumed by linuxdeploy at package
+# time). AppImage needs this to populate the AppDir's application metadata and
+# synthesize the AppRun launcher. Fields follow the freedesktop.org spec.
+[Desktop Entry]
+Type=Application
+Name=Isobar
+GenericName=Weather-fax decoder
+Comment=Cross-platform HF weather-fax (WEFAX) decoder
+Comment[ja]=HF気象ファクシミリ (WEFAX) デコーダ
+Exec=isobar-gui
+Icon=isobar
+Terminal=false
+Categories=HamRadio;AudioVideo;Audio;Network;
+Keywords=fax;wefax;ham;radio;weather;marine;
